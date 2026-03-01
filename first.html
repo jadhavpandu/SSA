@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aura Math | Light Mode</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --bg-light: #f3f4f6;
+            --card-glass: rgba(255, 255, 255, 0.7);
+            --text-main: #1f2937;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* Light, vibrant mesh gradient background */
+            background: linear-gradient(120deg, #e0e7ff 0%, #f3e8ff 50%, #dcfce7 100%);
+            background-size: 300% 300%;
+            animation: auraMove 10s ease infinite;
+            overflow: hidden;
+            color: var(--text-main);
+        }
+
+        @keyframes auraMove {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        #particleCanvas {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* Sad Flash Effect */
+        #sadOverlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(239, 68, 68, 0.15);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 5;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 380px;
+            background: var(--card-glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 2.5rem;
+            border-radius: 40px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.05);
+            border: 1px solid rgba(255,255,255,0.6);
+            position: relative;
+            z-index: 20;
+        }
+
+        h1 {
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-top: 0;
+            opacity: 0.5;
+        }
+
+        #question {
+            font-size: 4rem;
+            font-weight: 900;
+            margin: 10px 0 20px 0;
+            color: #111827;
+            text-shadow: 0 10px 20px rgba(0,0,0,0.05);
+        }
+
+        input {
+            width: 100%;
+            padding: 20px;
+            font-size: 2rem;
+            border-radius: 20px;
+            border: 2px solid rgba(255,255,255,0.8);
+            background: rgba(255,255,255,0.5);
+            color: #111827;
+            text-align: center;
+            outline: none;
+            margin-bottom: 20px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+            transition: all 0.3s;
+        }
+
+        input:focus {
+            background: white;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+        }
+
+        .btn-toggle {
+            width: 100%;
+            padding: 20px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+        }
+
+        .btn-start {
+            background: #111827;
+            color: white;
+        }
+
+        .btn-stop {
+            background: white;
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .shake { animation: shake 0.4s ease-in-out; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+
+        .hidden { display: none; }
+        #timer { font-weight: 700; color: var(--danger); margin-bottom: 5px; }
+        #result { font-weight: 600; min-height: 24px; margin-bottom: 15px; font-size: 1.2rem; }
+    </style>
+</head>
+<body>
+
+    <div id="sadOverlay"></div>
+    <canvas id="particleCanvas"></canvas>
+
+    <div class="container" id="gameCard">
+        <h1>Speed Practice</h1>
+        
+        <div id="gameContent" class="hidden">
+            <div id="timer">4s</div>
+            <div id="question">--</div>
+            <input type="number" id="answerInput" pattern="\d*" inputmode="numeric" placeholder="Answer">
+            <div id="result"></div>
+        </div>
+
+        <button id="toggleBtn" class="btn-toggle btn-start">Let's Start</button>
+    </div>
+
+    <script>
+        let isPlaying = false;
+        let timeLeft = 4;
+        let timerInterval, correctAnswer, nextQuestionTimeout;
+        
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+        const sadOverlay = document.getElementById('sadOverlay');
+        const answerInput = document.getElementById("answerInput");
+        const toggleBtn = document.getElementById("toggleBtn");
+        const gameContent = document.getElementById("gameContent");
+        const gameCard = document.getElementById("gameCard");
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        let particles = [];
+        class Particle {
+            constructor() {
+                this.x = canvas.width / 2;
+                this.y = canvas.height / 2;
+                this.size = Math.random() * 6 + 2;
+                this.speedX = (Math.random() - 0.5) * 12;
+                this.speedY = (Math.random() - 0.5) * 12;
+                // Gold/Bright colors for light mode
+                this.color = `hsl(${Math.random() * 40 + 40}, 100%, 60%)`;
+                this.opacity = 1;
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.opacity -= 0.02;
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = this.opacity;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach((p, i) => {
+                p.update();
+                p.draw();
+                if (p.opacity <= 0) particles.splice(i, 1);
+            });
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        toggleBtn.addEventListener("click", () => {
+            if (!isPlaying) {
+                isPlaying = true;
+                toggleBtn.textContent = "STOP";
+                toggleBtn.className = "btn-toggle btn-stop";
+                gameContent.classList.remove("hidden");
+                generateQuestion();
+            } else {
+                location.reload();
+            }
+        });
+
+        function generateQuestion() {
+            if (!isPlaying) return;
+            timeLeft = 4;
+            document.getElementById("timer").textContent = `${timeLeft}s`;
+            document.getElementById("result").textContent = "";
+            answerInput.value = "";
+            answerInput.focus();
+
+            const isSquare = Math.random() < 0.5;
+            if (isSquare) {
+                let n = Math.floor(Math.random() * 25) + 2;
+                correctAnswer = n * n;
+                document.getElementById("question").innerHTML = `${n}²`;
+            } else {
+                let n = Math.floor(Math.random() * 10) + 2;
+                correctAnswer = n * n * n;
+                document.getElementById("question").innerHTML = `${n}³`;
+            }
+            startTimer();
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById("timer").textContent = `${timeLeft}s`;
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    checkAnswer();
+                }
+            }, 1000);
+        }
+
+        answerInput.addEventListener("input", () => {
+            if (parseInt(answerInput.value) === correctAnswer) {
+                clearInterval(timerInterval);
+                checkAnswer();
+            }
+        });
+
+        function checkAnswer() {
+            if (!isPlaying) return;
+            const val = parseInt(answerInput.value);
+
+            if (val === correctAnswer) {
+                document.getElementById("result").textContent = "Perfect!";
+                document.getElementById("result").style.color = "var(--success)";
+                for(let i=0; i<40; i++) particles.push(new Particle());
+            } else {
+                document.getElementById("result").textContent = `Answer: ${correctAnswer}`;
+                document.getElementById("result").style.color = "var(--danger)";
+                gameCard.classList.add("shake");
+                sadOverlay.style.opacity = "1";
+                setTimeout(() => {
+                    gameCard.classList.remove("shake");
+                    sadOverlay.style.opacity = "0";
+                }, 400);
+            }
+            nextQuestionTimeout = setTimeout(generateQuestion, 1200);
+        }
+    </script>
+</body>
+</html>
